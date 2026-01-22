@@ -20,8 +20,8 @@
       padding: 20px;
 
       /* الصورة كخلفية */
-      background-image: url('Images.back/67193798.webp'); /* ضع المسار الصحيح للصورة */
-      background-size: cover;      /* تغطي الصفحة بالكامل */
+      background-image: url('67193798.webp'); /* اسم الصورة مباشرة في نفس المجلد */
+      background-size: cover;
       background-repeat: no-repeat;
       background-position: center;
     }
@@ -115,20 +115,21 @@
       }
     });
 
-    // المطالبة بالـ Claim كل 4 ساعات
+    // المطالبة بالـ Claim كل 5 دقائق
     function claim() {
       userRef.get().then(doc => {
         const data = doc.data();
         const now = Date.now();
-        const fourHours = 4 * 60 * 60 * 1000; // 4 ساعات بالمللي ثانية
-        if(now - (data.lastClaim || 0) < fourHours) {
-          alert("You can claim again in 4 hours!");
+        const fiveMinutes = 5 * 60 * 1000; // 5 دقائق بالمللي ثانية
+        if(now - (data.lastClaim || 0) < fiveMinutes) {
+          const remaining = Math.ceil((fiveMinutes - (now - (data.lastClaim || 0))) / 1000);
+          alert("You can claim again in " + remaining + " seconds!");
           return;
         }
-        let newBalance = (data.balance || 0) + 1; // 1 TON لكل Claim
+        let newBalance = (data.balance || 0) + 0.1; // 0.1 TON لكل Claim
         userRef.update({ balance: newBalance, lastClaim: now });
         document.getElementById("balance").innerText = newBalance.toFixed(4);
-        alert("You claimed 1 TON!");
+        alert("You claimed 0.1 TON!");
       });
     }
 
