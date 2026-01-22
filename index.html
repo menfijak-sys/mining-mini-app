@@ -12,39 +12,48 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 
   <style>
-    body { 
-      background-color: #0f172a; 
-      color: white; 
-      font-family: Arial, sans-serif; 
+    /* الفيديو يغطي كل الصفحة */
+    #bgVideo {
+      position: fixed;
+      top: 0;
+      left: 0;
+      min-width: 100%;
+      min-height: 100%;
+      z-index: -1; /* خلف جميع العناصر */
+      object-fit: cover;
+    }
+
+    body {
+      color: white;
+      font-family: Arial, sans-serif;
       padding: 20px;
-
-      /* GIF background */
-      background-image: url('Fan.gif'); /* اسم GIF الذي رفعته */
-      background-size: cover;
-      background-repeat: no-repeat;
-      background-position: center;
     }
 
-    .box { 
-      background: rgba(2, 6, 23, 0.7); /* شفاف قليلاً فوق GIF */
-      padding: 15px; 
-      border-radius: 10px; 
-      margin-bottom: 15px; 
+    .box {
+      background: rgba(2, 6, 23, 0.7); /* شفاف قليلاً فوق الفيديو */
+      padding: 15px;
+      border-radius: 10px;
+      margin-bottom: 15px;
     }
 
-    button { 
-      background: #22c55e; 
-      border: none; 
-      padding: 10px; 
-      width: 100%; 
-      border-radius: 8px; 
-      font-size: 16px; 
-      cursor: pointer; 
-      margin-bottom: 10px; 
+    button {
+      background: #22c55e;
+      border: none;
+      padding: 10px;
+      width: 100%;
+      border-radius: 8px;
+      font-size: 16px;
+      cursor: pointer;
+      margin-bottom: 10px;
     }
   </style>
 </head>
 <body>
+
+  <!-- فيديو الخلفية -->
+  <video autoplay muted loop id="bgVideo">
+    <source src="images.mp4" type="video/mp4">
+  </video>
 
   <h2>⛏️ Mining Dashboard</h2>
 
@@ -81,24 +90,24 @@
     const app = firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
 
-    // Display username
+    // عرض اسم المستخدم
     document.getElementById("username").innerText = user?.username ? "@" + user.username : user?.first_name || "Telegram User";
 
-    // Generate referral link
+    // إنشاء رابط الإحالة
     const referralCode = "t" + user.id;
     const referralLink = "https://t.me/TonMaiming_VIPbot?start=" + referralCode;
     document.getElementById("refLink").innerText = referralLink;
 
-    // User reference in Firestore
+    // المرجع في Firestore لكل مستخدم
     const userRef = db.collection("users").doc(user.id.toString());
 
-    // Load or create user
+    // تحميل أو إنشاء المستخدم
     userRef.get().then(doc => {
       if (!doc.exists) {
         userRef.set({
           userID: user.id,
           username: user.username || "Telegram User",
-          balance: 100, // ابدأ الرصيد بـ 100 TON
+          balance: 100, // الرصيد الابتدائي 100 TON
           referralCode: referralCode,
           lastClaim: 0,
           pendingWithdraw: []
@@ -109,7 +118,7 @@
       }
     });
 
-    // Claim reward every 4 hours
+    // المطالبة بالـ Claim كل 4 ساعات
     function claim() {
       userRef.get().then(doc => {
         const data = doc.data();
@@ -126,7 +135,7 @@
       });
     }
 
-    // Buy Miner function
+    // شراء Miner
     function buyMiner() {
       db.collection("transactions").add({
         userID: user.id,
@@ -136,7 +145,7 @@
       alert("Miner purchase request sent!");
     }
 
-    // Withdraw function
+    // طلب سحب
     function withdraw() {
       db.collection("transactions").add({
         userID: user.id,
