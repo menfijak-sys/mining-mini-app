@@ -18,8 +18,8 @@
       font-family: Arial, sans-serif;
       padding: 20px;
 
-      /* الخلفية الجديدة */
-      background-image: url('1769093138394.jpg'); /* الصورة الاحترافية الجديدة */
+      /* الخلفية الاحترافية الجديدة */
+      background-image: url('1769093138394.jpg');
       background-size: cover;
       background-repeat: no-repeat;
       background-position: center;
@@ -52,6 +52,7 @@
     <p><b>User:</b> <span id="username">Loading...</span></p>
     <p><b>Balance:</b> <span id="balance">0</span> TON</p>
     <p><b>Next Claim In:</b> <span id="claimTimer">Loading...</span></p>
+    <p><b>Referrals:</b> <span id="refCount">0</span></p>
   </div>
 
   <div class="box">
@@ -80,8 +81,10 @@
     const app = firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
 
+    // عرض اسم المستخدم
     document.getElementById("username").innerText = user?.username ? "@" + user.username : user?.first_name || "Telegram User";
 
+    // رابط الإحالة
     const referralCode = "t" + user.id;
     const referralLink = "https://t.me/TonMaiming_VIPbot?start=" + referralCode;
     document.getElementById("refLink").innerText = referralLink;
@@ -104,23 +107,48 @@
         });
         document.getElementById("balance").innerText = "100.0000";
       } else {
-        document.getElementById("balance").innerText = doc.data().balance.toFixed(4);
+        // حتى لو كان موجود، تأكد من تحديث الرصيد الظاهر
+        const balance = doc.data().balance || 100;
+        userRef.update({ balance }); 
+        document.getElementById("balance").innerText = balance.toFixed(4);
       }
-      startTimer();
+      startTimer();       // تشغيل العداد
+      updateReferrals();  // تحديث عدد الإحالات
     });
 
-    // تحديث عداد الوقت المتبقي لكل Claim
+    // تحديث عداد الوقت المتبقي لكل Claim بصيغة دقيقة:ثانية
     function startTimer() {
-      setInterval(() => {
+      function updateTimer() {
         userRef.get().then(doc => {
           const data = doc.data();
           const now = Date.now();
           const remaining = CLAIM_INTERVAL - (now - (data.lastClaim || 0));
-          document.getElementById("claimTimer").innerText = remaining > 0 
-            ? Math.ceil(remaining / 1000) + "s" 
-            : "Ready!";
+
+          if (remaining <= 0) {
+            document.getElementById("claimTimer").innerText = "Ready!";
+          } else {
+            const minutes = Math.floor(remaining / 60000);
+            const seconds = Math.floor((remaining % 60000) / 1000);
+            document.getElementById("claimTimer").innerText = 
+              String(minutes).padStart(2,'0') + ":" + String(seconds).padStart(2,'0');
+          }
         });
-      }, 1000);
+      }
+
+      updateTimer(); // تحديث مباشر عند التحميل
+      setInterval(updateTimer, 1000); // تحديث كل ثانية
+    }
+
+    // تحديث عدد الإحالات
+    function updateReferrals() {
+      db.collection("users")
+        .where("referralCode", "==", referralCode)
+        .get()
+        .then(snapshot => {
+          const count = snapshot.size - 1 >= 0 ? snapshot.size - 1 : 0;
+          document.getElementById("refCount").innerText = count;
+        });
+      setTimeout(updateReferrals, 60000); // تحديث كل دقيقة
     }
 
     function claim() {
@@ -155,6 +183,7 @@
       });
       alert("Withdraw request sent!");
     }
+
   </script>
 </body>
 </html>
