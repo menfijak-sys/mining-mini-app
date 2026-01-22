@@ -12,9 +12,36 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 
   <style>
-    body { background-color: #0f172a; color: white; font-family: Arial, sans-serif; padding: 20px; }
-    .box { background: #020617; padding: 15px; border-radius: 10px; margin-bottom: 15px; }
-    button { background: #22c55e; border: none; padding: 10px; width: 100%; border-radius: 8px; font-size: 16px; cursor: pointer; }
+    body { 
+      background-color: #0f172a; 
+      color: white; 
+      font-family: Arial, sans-serif; 
+      padding: 20px;
+
+      /* GIF background */
+      background-image: url('Fan.gif'); /* اسم GIF الذي رفعته */
+      background-size: cover;
+      background-repeat: no-repeat;
+      background-position: center;
+    }
+
+    .box { 
+      background: rgba(2, 6, 23, 0.7); /* شفاف قليلاً فوق GIF */
+      padding: 15px; 
+      border-radius: 10px; 
+      margin-bottom: 15px; 
+    }
+
+    button { 
+      background: #22c55e; 
+      border: none; 
+      padding: 10px; 
+      width: 100%; 
+      border-radius: 8px; 
+      font-size: 16px; 
+      cursor: pointer; 
+      margin-bottom: 10px; 
+    }
   </style>
 </head>
 <body>
@@ -23,7 +50,7 @@
 
   <div class="box">
     <p><b>User:</b> <span id="username">Loading...</span></p>
-    <p><b>Balance:</b> <span id="balance">0.0000</span> MP</p>
+    <p><b>Balance:</b> <span id="balance">0</span> TON</p>
   </div>
 
   <div class="box">
@@ -41,7 +68,7 @@
     tg.ready();
     const user = tg.initDataUnsafe.user;
 
-    // Firebase config (من القيم التي أرسلتها)
+    // Firebase config
     const firebaseConfig = {
       apiKey: "AIzaSyAlIwTDXbRaF1eSWjkIYX4MnmavkeVzDQw",
       authDomain: "miningminiapp.firebaseapp.com",
@@ -51,41 +78,51 @@
       appId: "1:802328536490:web:802892f658a4c1f1c077d3"
     };
 
-    // Initialize Firebase
     const app = firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
 
-    // Show username
-    document.getElementById("username").innerText = user?.username ? "@" + user.username : "Telegram User";
+    // Display username
+    document.getElementById("username").innerText = user?.username ? "@" + user.username : user?.first_name || "Telegram User";
 
     // Generate referral link
     const referralCode = "t" + user.id;
-    const referralLink = "https://t.me/YOUR_BOT_USERNAME?start=" + referralCode;
+    const referralLink = "https://t.me/TonMaiming_VIPbot?start=" + referralCode;
     document.getElementById("refLink").innerText = referralLink;
 
-    // Load or create user in Firestore
+    // User reference in Firestore
     const userRef = db.collection("users").doc(user.id.toString());
 
+    // Load or create user
     userRef.get().then(doc => {
       if (!doc.exists) {
         userRef.set({
           userID: user.id,
           username: user.username || "Telegram User",
-          balance: 0,
+          balance: 100, // ابدأ الرصيد بـ 100 TON
           referralCode: referralCode,
+          lastClaim: 0,
           pendingWithdraw: []
         });
+        document.getElementById("balance").innerText = "100.0000";
       } else {
         document.getElementById("balance").innerText = doc.data().balance.toFixed(4);
       }
     });
 
-    // Claim reward function
+    // Claim reward every 4 hours
     function claim() {
       userRef.get().then(doc => {
-        let newBalance = (doc.data().balance || 0) + 0.01;
-        userRef.update({ balance: newBalance });
+        const data = doc.data();
+        const now = Date.now();
+        const fourHours = 4 * 60 * 60 * 1000; // 4 ساعات بالمللي ثانية
+        if(now - (data.lastClaim || 0) < fourHours) {
+          alert("You can claim again in 4 hours!");
+          return;
+        }
+        let newBalance = (data.balance || 0) + 1; // 1 TON لكل Claim
+        userRef.update({ balance: newBalance, lastClaim: now });
         document.getElementById("balance").innerText = newBalance.toFixed(4);
+        alert("You claimed 1 TON!");
       });
     }
 
