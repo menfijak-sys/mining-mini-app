@@ -1,50 +1,43 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-<meta charset="UTF-8">
-<title>TON Mining Mini App</title>
+  <meta charset="UTF-8">
+  <title>Mining Mini App</title>
 
-<script src="https://telegram.org/js/telegram-web-app.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 
-<style>
-body {
-  margin: 0;
-  font-family: Arial, sans-serif;
-  color: white;
-  background: url("1769093138394.jpg") center/cover no-repeat fixed;
-}
-
-.overlay {
-  background: rgba(0,0,0,0.7);
-  min-height: 100vh;
-  padding: 20px;
-}
-
-.box {
-  background: rgba(0,0,0,0.6);
-  padding: 15px;
-  border-radius: 12px;
-  margin-bottom: 15px;
-}
-
-button {
-  width: 100%;
-  padding: 12px;
-  margin-top: 10px;
-  font-size: 16px;
-  border-radius: 10px;
-  border: none;
-  cursor: pointer;
-  background: #22c55e;
-  color: black;
-}
-</style>
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      color: white;
+      background: url("1769093138394.jpg") no-repeat center center fixed;
+      background-size: cover;
+      padding: 20px;
+    }
+    .box {
+      background: rgba(2,6,23,0.85);
+      padding: 15px;
+      border-radius: 12px;
+      margin-bottom: 15px;
+    }
+    button {
+      background: #22c55e;
+      border: none;
+      padding: 12px;
+      width: 100%;
+      border-radius: 10px;
+      font-size: 16px;
+      cursor: pointer;
+      margin-bottom: 10px;
+      color: black;
+      font-weight: bold;
+    }
+  </style>
 </head>
-
 <body>
-<div class="overlay">
 
 <h2>⛏️ Mining Dashboard</h2>
 
@@ -52,7 +45,7 @@ button {
   <p><b>User:</b> <span id="username">Loading...</span></p>
   <p><b>Balance:</b> <span id="balance">0</span> TON</p>
   <p><b>Next Claim In:</b> <span id="timer">Loading...</span></p>
-  <p><b>Referrals:</b> <span id="referrals">0</span></p>
+  <p><b>Referrals:</b> <span id="refCount">0</span></p>
 </div>
 
 <div class="box">
@@ -64,90 +57,89 @@ button {
 <button onclick="withdraw()">Request Withdraw</button>
 
 <script>
-// Telegram
+/* ================= Telegram ================= */
 const tg = window.Telegram.WebApp;
 tg.ready();
-
 const user = tg.initDataUnsafe.user;
-const startParam = tg.initDataUnsafe.start_param || null;
+const startParam = tg.initDataUnsafe.start_param;
 
-// SETTINGS
-const CLAIM_INTERVAL = 5 * 60 * 1000; // 5 minutes
-const CLAIM_AMOUNT = 0.1;
-const REF_REWARD = 1;
-
-// Firebase
+/* ================= Firebase ================= */
 const firebaseConfig = {
   apiKey: "AIzaSyAlIwTDXbRaF1eSWjkIYX4MnmavkeVzDQw",
   authDomain: "miningminiapp.firebaseapp.com",
   projectId: "miningminiapp",
+  storageBucket: "miningminiapp.firebasestorage.app",
+  messagingSenderId: "802328536490",
+  appId: "1:802328536490:web:802892f658a4c1f1c077d3"
 };
-
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 
-const userRef = db.collection("users").doc(user.id.toString());
+/* ================= Constants ================= */
+const CLAIM_INTERVAL = 5 * 60 * 1000; // 5 minutes
+const CLAIM_REWARD = 0.1;
+const REF_REWARD = 1;
+const BOT_USERNAME = "EasyPay_telegrambot";
 
-// UI
+/* ================= UI ================= */
 document.getElementById("username").innerText =
-  user.username ? "@" + user.username : user.first_name;
+  user?.username ? "@" + user.username : user?.first_name || "Telegram User";
 
 const referralCode = "t" + user.id;
 document.getElementById("refLink").innerText =
-  "https://t.me/TonMaiming_VIPbot?start=" + referralCode;
+  "https://t.me/" + BOT_USERNAME + "?start=" + referralCode;
 
-// CREATE / LOAD USER
+/* ================= Firestore ================= */
+const userRef = db.collection("users").doc(user.id.toString());
+
 userRef.get().then(doc => {
   if (!doc.exists) {
-
-    const newUser = {
+    userRef.set({
       userID: user.id,
       username: user.username || "",
       balance: 0,
+      lastClaim: 0,
       referrals: 0,
-      referralCode: referralCode,
-      referredBy: null,
-      lastClaim: Date.now() - CLAIM_INTERVAL
-    };
-
-    userRef.set(newUser).then(() => {
-
-      // HANDLE REFERRAL
-      if (startParam && startParam !== referralCode) {
-        db.collection("users")
-          .where("referralCode", "==", startParam)
-          .get()
-          .then(snap => {
-            if (!snap.empty) {
-              snap.forEach(refDoc => {
-                refDoc.ref.update({
-                  referrals: firebase.firestore.FieldValue.increment(1),
-                  balance: firebase.firestore.FieldValue.increment(REF_REWARD)
-                });
-                userRef.update({ referredBy: startParam });
-              });
-            }
-          });
-      }
-    });
-
+      claimedRef: false
+    }).then(() => handleReferral());
   } else {
-    const d = doc.data();
-    document.getElementById("balance").innerText = d.balance.toFixed(2);
-    document.getElementById("referrals").innerText = d.referrals || 0;
+    updateUI(doc.data());
+    handleReferral();
   }
 });
 
-// CLAIM
+/* ================= Referral Logic ================= */
+function handleReferral() {
+  if (!startParam || !startParam.startsWith("t")) return;
+  if (startParam === referralCode) return;
+
+  const referrerId = startParam.substring(1);
+  const refRef = db.collection("users").doc(referrerId);
+
+  refRef.get().then(doc => {
+    if (doc.exists) {
+      userRef.get().then(me => {
+        if (me.data().claimedRef) return;
+        refRef.update({
+          balance: (doc.data().balance || 0) + REF_REWARD,
+          referrals: (doc.data().referrals || 0) + 1
+        });
+        userRef.update({ claimedRef: true });
+      });
+    }
+  });
+}
+
+/* ================= Claim ================= */
 function claim() {
   userRef.get().then(doc => {
-    const d = doc.data();
+    const data = doc.data();
     const now = Date.now();
-    if (now - d.lastClaim < CLAIM_INTERVAL) {
-      alert("Not ready yet!");
+    if (now - data.lastClaim < CLAIM_INTERVAL) {
+      alert("Please wait for the timer.");
       return;
     }
-    const newBalance = d.balance + CLAIM_AMOUNT;
+    const newBalance = (data.balance || 0) + CLAIM_REWARD;
     userRef.update({
       balance: newBalance,
       lastClaim: now
@@ -156,30 +148,39 @@ function claim() {
   });
 }
 
-// TIMER
+/* ================= Withdraw ================= */
+function withdraw() {
+  db.collection("withdraws").add({
+    userID: user.id,
+    amount: "manual",
+    time: new Date()
+  });
+  alert("Withdraw request sent!");
+}
+
+/* ================= Timer ================= */
 setInterval(() => {
   userRef.get().then(doc => {
-    const d = doc.data();
-    if (!d) return;
-
-    const diff = CLAIM_INTERVAL - (Date.now() - d.lastClaim);
-    if (diff <= 0) {
-      document.getElementById("timer").innerText = "Ready!";
-    } else {
-      const m = Math.floor(diff / 60000);
-      const s = Math.floor((diff % 60000) / 1000);
-      document.getElementById("timer").innerText =
-        m + ":" + s.toString().padStart(2, "0");
-    }
+    if (!doc.exists) return;
+    const data = doc.data();
+    updateUI(data);
   });
 }, 1000);
 
-// WITHDRAW (manual)
-function withdraw() {
-  alert("Withdraw request sent (manual processing)");
+function updateUI(data) {
+  document.getElementById("balance").innerText = (data.balance || 0).toFixed(2);
+  document.getElementById("refCount").innerText = data.referrals || 0;
+
+  const diff = CLAIM_INTERVAL - (Date.now() - (data.lastClaim || 0));
+  if (diff <= 0) {
+    document.getElementById("timer").innerText = "Ready!";
+  } else {
+    const m = Math.floor(diff / 60000);
+    const s = Math.floor((diff % 60000) / 1000);
+    document.getElementById("timer").innerText = `${m}m ${s}s`;
+  }
 }
 </script>
 
-</div>
 </body>
 </html>
