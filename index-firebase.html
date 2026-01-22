@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Mining Mini App</title>
+
+  <!-- Telegram Web App Library -->
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+
+  <style>
+    body { background-color: #0f172a; color: white; font-family: Arial, sans-serif; padding: 20px; }
+    .box { background: #020617; padding: 15px; border-radius: 10px; margin-bottom: 15px; }
+    button { background: #22c55e; border: none; padding: 10px; width: 100%; border-radius: 8px; font-size: 16px; cursor: pointer; }
+  </style>
+</head>
+<body>
+
+  <h2>⛏️ Mining Dashboard</h2>
+
+  <div class="box">
+    <p><b>User:</b> <span id="username">Loading...</span></p>
+    <p><b>Balance:</b> <span id="balance">0.0000</span> MP</p>
+  </div>
+
+  <div class="box">
+    <p><b>Your Referral Link:</b></p>
+    <p id="refLink">Generating...</p>
+  </div>
+
+  <button onclick="claim()">Claim Mining Reward</button>
+  <button onclick="buyMiner()">Buy Miner</button>
+  <button onclick="withdraw()">Request Withdraw</button>
+
+  <script>
+    // Telegram WebApp
+    const tg = window.Telegram.WebApp;
+    tg.ready();
+    const user = tg.initDataUnsafe.user;
+
+    // Firebase config (من القيم التي أرسلتها)
+    const firebaseConfig = {
+      apiKey: "AIzaSyAlIwTDXbRaF1eSWjkIYX4MnmavkeVzDQw",
+      authDomain: "miningminiapp.firebaseapp.com",
+      projectId: "miningminiapp",
+      storageBucket: "miningminiapp.firebasestorage.app",
+      messagingSenderId: "802328536490",
+      appId: "1:802328536490:web:802892f658a4c1f1c077d3"
+    };
+
+    // Initialize Firebase
+    const app = firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
+    // Show username
+    document.getElementById("username").innerText = user?.username ? "@" + user.username : "Telegram User";
+
+    // Generate referral link
+    const referralCode = "t" + user.id;
+    const referralLink = "https://t.me/YOUR_BOT_USERNAME?start=" + referralCode;
+    document.getElementById("refLink").innerText = referralLink;
+
+    // Load or create user in Firestore
+    const userRef = db.collection("users").doc(user.id.toString());
+
+    userRef.get().then(doc => {
+      if (!doc.exists) {
+        userRef.set({
+          userID: user.id,
+          username: user.username || "Telegram User",
+          balance: 0,
+          referralCode: referralCode,
+          pendingWithdraw: []
+        });
+      } else {
+        document.getElementById("balance").innerText = doc.data().balance.toFixed(4);
+      }
+    });
+
+    // Claim reward function
+    function claim() {
+      userRef.get().then(doc => {
+        let newBalance = (doc.data().balance || 0) + 0.01;
+        userRef.update({ balance: newBalance });
+        document.getElementById("balance").innerText = newBalance.toFixed(4);
+      });
+    }
+
+    // Buy Miner function
+    function buyMiner() {
+      db.collection("transactions").add({
+        userID: user.id,
+        type: "buy_miner",
+        timestamp: new Date()
+      });
+      alert("Miner purchase request sent!");
+    }
+
+    // Withdraw function
+    function withdraw() {
+      db.collection("transactions").add({
+        userID: user.id,
+        type: "withdraw",
+        timestamp: new Date()
+      });
+      alert("Withdraw request sent!");
+    }
+  </script>
+</body>
+</html>
