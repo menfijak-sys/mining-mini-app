@@ -4,186 +4,171 @@
   <meta charset="UTF-8">
   <title>Mining Mini App</title>
 
-  <!-- Telegram Web App Library -->
+  <!-- Telegram -->
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
 
-  <!-- Firebase SDK -->
+  <!-- Firebase -->
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 
   <style>
     body {
-      background-color: #0f172a;
-      color: white;
-      font-family: Arial, sans-serif;
+      margin: 0;
       padding: 20px;
-
-      /* الخلفية الاحترافية الجديدة */
+      font-family: Arial, sans-serif;
+      color: white;
       background-image: url('1769093138394.jpg');
       background-size: cover;
-      background-repeat: no-repeat;
       background-position: center;
     }
 
     .box {
-      background: rgba(2, 6, 23, 0.7);
+      background: rgba(0,0,0,0.65);
       padding: 15px;
       border-radius: 10px;
       margin-bottom: 15px;
     }
 
     button {
-      background: #22c55e;
-      border: none;
-      padding: 10px;
       width: 100%;
+      padding: 12px;
+      margin-bottom: 10px;
+      border: none;
       border-radius: 8px;
+      background: #22c55e;
       font-size: 16px;
       cursor: pointer;
-      margin-bottom: 10px;
     }
   </style>
 </head>
 <body>
 
-  <h2>⛏️ Mining Dashboard</h2>
+<h2>⛏️ Mining Dashboard</h2>
 
-  <div class="box">
-    <p><b>User:</b> <span id="username">Loading...</span></p>
-    <p><b>Balance:</b> <span id="balance">0</span> TON</p>
-    <p><b>Next Claim In:</b> <span id="claimTimer">Loading...</span></p>
-    <p><b>Referrals:</b> <span id="refCount">0</span></p>
-  </div>
+<div class="box">
+  <p><b>User:</b> <span id="username">...</span></p>
+  <p><b>Balance:</b> <span id="balance">0</span> TON</p>
+  <p><b>Next Claim In:</b> <span id="claimTimer">--:--</span></p>
+  <p><b>Referrals:</b> <span id="refCount">0</span></p>
+</div>
 
-  <div class="box">
-    <p><b>Your Referral Link:</b></p>
-    <p id="refLink">Generating...</p>
-  </div>
+<div class="box">
+  <p><b>Your Referral Link:</b></p>
+  <p id="refLink">...</p>
+</div>
 
-  <button onclick="claim()">Claim Mining Reward</button>
-  <button onclick="buyMiner()">Buy Miner</button>
-  <button onclick="withdraw()">Request Withdraw</button>
+<button onclick="claim()">Claim Mining Reward</button>
+<button onclick="buyMiner()">Buy Miner</button>
+<button onclick="withdraw()">Request Withdraw</button>
 
-  <script>
-    const tg = window.Telegram.WebApp;
-    tg.ready();
-    const user = tg.initDataUnsafe.user;
+<script>
+/* ================= TELEGRAM ================= */
+const tg = window.Telegram.WebApp;
+tg.ready();
 
-    const firebaseConfig = {
-      apiKey: "AIzaSyAlIwTDXbRaF1eSWjkIYX4MnmavkeVzDQw",
-      authDomain: "miningminiapp.firebaseapp.com",
-      projectId: "miningminiapp",
-      storageBucket: "miningminiapp.firebasestorage.app",
-      messagingSenderId: "802328536490",
-      appId: "1:802328536490:web:802892f658a4c1f1c077d3"
-    };
+const user = tg.initDataUnsafe.user;
+const startParam = tg.initDataUnsafe.start_param || null;
 
-    const app = firebase.initializeApp(firebaseConfig);
-    const db = firebase.firestore();
+/* ================= FIREBASE ================= */
+firebase.initializeApp({
+  apiKey: "AIzaSyAlIwTDXbRaF1eSWjkIYX4MnmavkeVzDQw",
+  authDomain: "miningminiapp.firebaseapp.com",
+  projectId: "miningminiapp",
+});
 
-    // عرض اسم المستخدم
-    document.getElementById("username").innerText = user?.username ? "@" + user.username : user?.first_name || "Telegram User";
+const db = firebase.firestore();
 
-    // رابط الإحالة
-    const referralCode = "t" + user.id;
-    const referralLink = "https://t.me/TonMaiming_VIPbot?start=" + referralCode;
-    document.getElementById("refLink").innerText = referralLink;
+/* ================= CONSTANTS ================= */
+const CLAIM_INTERVAL = 5 * 60 * 1000; // 5 minutes
+const CLAIM_AMOUNT = 0.1;
 
-    const userRef = db.collection("users").doc(user.id.toString());
+/* ================= USER ================= */
+const userId = user.id.toString();
+const referralCode = "t" + userId;
+const userRef = db.collection("users").doc(userId);
 
-    const CLAIM_INTERVAL = 5 * 60 * 1000; // 5 دقائق
-    const CLAIM_AMOUNT = 0.1; // 0.1 TON لكل مطالبة
+/* UI */
+document.getElementById("username").innerText =
+  user.username ? "@" + user.username : user.first_name;
 
-    // تحميل أو إنشاء المستخدم
-    userRef.get().then(doc => {
-      if (!doc.exists) {
-        userRef.set({
-          userID: user.id,
-          username: user.username || "Telegram User",
-          balance: 100,
-          referralCode: referralCode,
-          lastClaim: 0,
-          pendingWithdraw: []
-        });
-        document.getElementById("balance").innerText = "100.0000";
-      } else {
-        // حتى لو كان موجود، تأكد من تحديث الرصيد الظاهر
-        const balance = doc.data().balance || 100;
-        userRef.update({ balance }); 
-        document.getElementById("balance").innerText = balance.toFixed(4);
-      }
-      startTimer();       // تشغيل العداد
-      updateReferrals();  // تحديث عدد الإحالات
+document.getElementById("refLink").innerText =
+  "https://t.me/TonMaiming_VIPbot?start=" + referralCode;
+
+/* ================= CREATE / LOAD USER ================= */
+userRef.get().then(doc => {
+  if (!doc.exists) {
+    userRef.set({
+      userID: userId,
+      username: user.username || "",
+      balance: 100,
+      referralCode: referralCode,
+      referredBy: startParam,
+      lastClaim: 0
     });
+    document.getElementById("balance").innerText = "100.0000";
+  } else {
+    document.getElementById("balance").innerText =
+      (doc.data().balance || 0).toFixed(4);
+  }
 
-    // تحديث عداد الوقت المتبقي لكل Claim بصيغة دقيقة:ثانية
-    function startTimer() {
-      function updateTimer() {
-        userRef.get().then(doc => {
-          const data = doc.data();
-          const now = Date.now();
-          const remaining = CLAIM_INTERVAL - (now - (data.lastClaim || 0));
+  startTimer();
+  updateReferrals();
+});
 
-          if (remaining <= 0) {
-            document.getElementById("claimTimer").innerText = "Ready!";
-          } else {
-            const minutes = Math.floor(remaining / 60000);
-            const seconds = Math.floor((remaining % 60000) / 1000);
-            document.getElementById("claimTimer").innerText = 
-              String(minutes).padStart(2,'0') + ":" + String(seconds).padStart(2,'0');
-          }
-        });
+/* ================= TIMER ================= */
+function startTimer() {
+  setInterval(() => {
+    userRef.get().then(doc => {
+      if (!doc.exists) return;
+      const last = doc.data().lastClaim || 0;
+      const now = Date.now();
+      const remain = CLAIM_INTERVAL - (now - last);
+
+      if (remain <= 0) {
+        document.getElementById("claimTimer").innerText = "Ready!";
+      } else {
+        const m = Math.floor(remain / 60000);
+        const s = Math.floor((remain % 60000) / 1000);
+        document.getElementById("claimTimer").innerText =
+          `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
       }
+    });
+  }, 1000);
+}
 
-      updateTimer(); // تحديث مباشر عند التحميل
-      setInterval(updateTimer, 1000); // تحديث كل ثانية
+/* ================= REFERRALS ================= */
+function updateReferrals() {
+  db.collection("users")
+    .where("referredBy", "==", referralCode)
+    .get()
+    .then(snap => {
+      document.getElementById("refCount").innerText = snap.size;
+    });
+}
+
+/* ================= ACTIONS ================= */
+function claim() {
+  userRef.get().then(doc => {
+    const data = doc.data();
+    const now = Date.now();
+    if (now - data.lastClaim < CLAIM_INTERVAL) {
+      alert("Not ready yet");
+      return;
     }
+    const newBalance = (data.balance || 0) + CLAIM_AMOUNT;
+    userRef.update({ balance: newBalance, lastClaim: now });
+    document.getElementById("balance").innerText = newBalance.toFixed(4);
+  });
+}
 
-    // تحديث عدد الإحالات
-    function updateReferrals() {
-      db.collection("users")
-        .where("referralCode", "==", referralCode)
-        .get()
-        .then(snapshot => {
-          const count = snapshot.size - 1 >= 0 ? snapshot.size - 1 : 0;
-          document.getElementById("refCount").innerText = count;
-        });
-      setTimeout(updateReferrals, 60000); // تحديث كل دقيقة
-    }
+function buyMiner() {
+  alert("Miner request sent");
+}
 
-    function claim() {
-      userRef.get().then(doc => {
-        const data = doc.data();
-        const now = Date.now();
-        if(now - (data.lastClaim || 0) < CLAIM_INTERVAL) {
-          alert("You can claim again later!");
-          return;
-        }
-        let newBalance = (data.balance || 0) + CLAIM_AMOUNT;
-        userRef.update({ balance: newBalance, lastClaim: now });
-        document.getElementById("balance").innerText = newBalance.toFixed(4);
-        alert("You claimed 0.1 TON!");
-      });
-    }
+function withdraw() {
+  alert("Withdraw request sent");
+}
+</script>
 
-    function buyMiner() {
-      db.collection("transactions").add({
-        userID: user.id,
-        type: "buy_miner",
-        timestamp: new Date()
-      });
-      alert("Miner purchase request sent!");
-    }
-
-    function withdraw() {
-      db.collection("transactions").add({
-        userID: user.id,
-        type: "withdraw",
-        timestamp: new Date()
-      });
-      alert("Withdraw request sent!");
-    }
-
-  </script>
 </body>
 </html>
