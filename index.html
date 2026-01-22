@@ -62,8 +62,8 @@
     // Display username
     document.getElementById("username").innerText = user?.username ? "@" + user.username : user?.first_name || "Telegram User";
 
-    // Referral Link
-    const referralLink = "https://t.me/EasyPay_telegrambot/app?startapp=" + user.id;
+    // Referral Link with official Web App URL
+    const referralLink = "https://t.me/EasyPay_telegrambot/NewVIPMainingapp?startapp=" + user.id;
     document.getElementById("refLink").innerText = referralLink;
 
     // User reference in Firestore
@@ -71,7 +71,7 @@
 
     // Read start_param for referral
     const params = new URLSearchParams(window.location.search);
-    const startParam = params.get('startapp');
+    const startParam = params.get('startapp'); // المحيل
 
     // Load or create user
     userRef.get().then(doc => {
@@ -90,18 +90,20 @@
       }
     });
 
+    // Handle referral once
     function handleReferral() {
       if (!startParam || startParam === user.id.toString()) return; // لا تعطي مكافأة لنفسه
       userRef.get().then(me => {
-        if (me.data().claimedRef) return; // مكافأة الاحالة لمنع التكرار
+        if (me.data().claimedRef) return; // منع التكرار
         const refRef = db.collection("users").doc(startParam);
         refRef.get().then(doc => {
           if (doc.exists) {
             refRef.update({
-              balance: (doc.data().balance || 0) + 1, // مكافأة الإحالة 1 TON
+              balance: (doc.data().balance || 0) + 1, // مكافأة إحالة 1 TON
               referrals: (doc.data().referrals || 0) + 1
             });
             userRef.update({ claimedRef: true }); // علامة أنه حصل على مكافأة
+            updateUI(me.data());
           }
         });
       });
