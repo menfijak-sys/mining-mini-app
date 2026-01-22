@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Mining App</title>
+
+  <!-- Telegram Web App Library -->
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+
+  <style>
+    body {
+      background-color: #0f172a;
+      color: white;
+      font-family: Arial, sans-serif;
+      padding: 20px;
+    }
+    .box {
+      background: #020617;
+      padding: 15px;
+      border-radius: 10px;
+      margin-bottom: 15px;
+    }
+    button {
+      background: #22c55e;
+      border: none;
+      padding: 10px;
+      width: 100%;
+      border-radius: 8px;
+      font-size: 16px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+
+<body>
+
+  <h2>⛏️ Mining Dashboard</h2>
+
+  <div class="box">
+    <p><b>User:</b> <span id="username">Loading...</span></p>
+    <p><b>Balance:</b> <span id="balance">0.0000</span> MP</p>
+  </div>
+
+  <div class="box">
+    <p><b>Your Referral Link:</b></p>
+    <p id="refLink">Generating...</p>
+  </div>
+
+  <button onclick="claim()">Claim Mining Reward</button>
+
+  <script>
+    const tg = window.Telegram.WebApp;
+    tg.ready();
+
+    // Telegram user data
+    const user = tg.initDataUnsafe.user;
+
+    // Show username
+    document.getElementById("username").innerText =
+      user?.username ? "@" + user.username : "Telegram User";
+
+    // Fake balance (temporary)
+    let balance = 0;
+
+    function claim() {
+      balance += 0.01;
+      document.getElementById("balance").innerText = balance.toFixed(4);
+    }
+
+    // Generate referral link starting with "t"
+    const referralCode = "t" + user.id;
+    const referralLink = "https://t.me/YOUR_BOT_USERNAME?start=" + referralCode;
+
+    document.getElementById("refLink").innerText = referralLink;
+  </script>
+
+</body>
+</html>
