@@ -41,12 +41,10 @@
   <button onclick="withdraw()">Request Withdraw</button>
 
   <script>
-    // Telegram WebApp
     const tg = window.Telegram.WebApp;
     tg.ready();
     const user = tg.initDataUnsafe.user;
 
-    // Firebase config
     const firebaseConfig = {
       apiKey: "AIzaSyAlIwTDXbRaF1eSWjkIYX4MnmavkeVzDQw",
       authDomain: "miningminiapp.firebaseapp.com",
@@ -59,98 +57,89 @@
     const app = firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
 
-    // Display username
     document.getElementById("username").innerText = user?.username ? "@" + user.username : user?.first_name || "Telegram User";
 
-    // Referral Link with official Web App URL
-    const referralLink = "https://t.me/EasyPay_telegrambot/NewVIPMainingapp?startapp=" + user.id;
-    document.getElementById("refLink").innerText = referralLink;
-
-    // User reference in Firestore
     const userRef = db.collection("users").doc(user.id.toString());
-
-    // Read start_param for referral
     const params = new URLSearchParams(window.location.search);
     const startParam = params.get('startapp'); // المحيل
 
-    // Load or create user
-    userRef.get().then(doc => {
+    // رابط الإحالة الرسمي
+    const referralLink = "https://t.me/EasyPay_telegrambot/NewVIPMainingapp?startapp=" + user.id;
+    document.getElementById("refLink").innerText = referralLink;
+
+    const CLAIM_INTERVAL = 5 * 60 * 1000; // 5 دقائق
+
+    // إنشاء المستخدم أو جلب بياناته ثم التعامل مع الإحالة
+    async function initUser() {
+      const doc = await userRef.get();
       if (!doc.exists) {
-        userRef.set({
+        await userRef.set({
           userID: user.id,
           username: user.username || "Telegram User",
           balance: 0,
           referrals: 0,
           lastClaim: 0,
           claimedRef: false
-        }).then(() => handleReferral());
-      } else {
-        updateUI(doc.data());
-        handleReferral();
-      }
-    });
-
-    // Handle referral once
-    function handleReferral() {
-      if (!startParam || startParam === user.id.toString()) return; // لا تعطي مكافأة لنفسه
-      userRef.get().then(me => {
-        if (me.data().claimedRef) return; // منع التكرار
-        const refRef = db.collection("users").doc(startParam);
-        refRef.get().then(doc => {
-          if (doc.exists) {
-            refRef.update({
-              balance: (doc.data().balance || 0) + 1, // مكافأة إحالة 1 TON
-              referrals: (doc.data().referrals || 0) + 1
-            });
-            userRef.update({ claimedRef: true }); // علامة أنه حصل على مكافأة
-            updateUI(me.data());
-          }
         });
-      });
+      }
+      handleReferral(); // إعطاء مكافأة الإحالة إذا موجود startapp
+      updateUI();
     }
 
-    function updateUI(data) {
+    async function handleReferral() {
+      if (!startParam || startParam === user.id.toString()) return;
+      const me = await userRef.get();
+      if (me.data().claimedRef) return;
+      const refRef = db.collection("users").doc(startParam);
+      const refDoc = await refRef.get();
+      if (refDoc.exists) {
+        await refRef.update({
+          balance: (refDoc.data().balance || 0) + 1,
+          referrals: (refDoc.data().referrals || 0) + 1
+        });
+        await userRef.update({ claimedRef: true });
+      }
+      updateUI();
+    }
+
+    async function updateUI() {
+      const doc = await userRef.get();
+      const data = doc.data();
       document.getElementById("balance").innerText = (data.balance || 0).toFixed(2);
       document.getElementById("refCount").innerText = data.referrals || 0;
     }
 
-    // Claim reward every 5 minutes (0.1 TON)
-    const CLAIM_INTERVAL = 5 * 60 * 1000;
-
-    function claim() {
-      userRef.get().then(doc => {
-        const data = doc.data();
-        const now = Date.now();
-        if(now - (data.lastClaim || 0) < CLAIM_INTERVAL) {
-          alert("You can claim again in 5 minutes!");
-          return;
-        }
-        let newBalance = (data.balance || 0) + 0.1; // 0.1 TON per claim
-        userRef.update({ balance: newBalance, lastClaim: now });
-        document.getElementById("balance").innerText = newBalance.toFixed(2);
-        alert("You claimed 0.1 TON!");
-      });
+    async function claim() {
+      const doc = await userRef.get();
+      const data = doc.data();
+      const now = Date.now();
+      if(now - (data.lastClaim || 0) < CLAIM_INTERVAL) {
+        alert("You can claim again in 5 minutes!");
+        return;
+      }
+      const newBalance = (data.balance || 0) + 0.1;
+      await userRef.update({ balance: newBalance, lastClaim: now });
+      document.getElementById("balance").innerText = newBalance.toFixed(2);
+      alert("You claimed 0.1 TON!");
     }
 
-    // Countdown Timer
-    setInterval(() => {
-      userRef.get().then(doc => {
-        const data = doc.data();
-        const now = Date.now();
-        const remaining = CLAIM_INTERVAL - (now - (data.lastClaim || 0));
-        if(remaining > 0) {
-          const minutes = Math.floor(remaining / 60000);
-          const seconds = Math.floor((remaining % 60000) / 1000);
-          document.getElementById("claimTimer").innerText = minutes + "m " + seconds + "s";
-        } else {
-          document.getElementById("claimTimer").innerText = "Ready!";
-        }
-      });
+    // عداد المطالبة
+    setInterval(async () => {
+      const doc = await userRef.get();
+      const data = doc.data();
+      const now = Date.now();
+      const remaining = CLAIM_INTERVAL - (now - (data.lastClaim || 0));
+      if(remaining > 0) {
+        const minutes = Math.floor(remaining / 60000);
+        const seconds = Math.floor((remaining % 60000) / 1000);
+        document.getElementById("claimTimer").innerText = minutes + "m " + seconds + "s";
+      } else {
+        document.getElementById("claimTimer").innerText = "Ready!";
+      }
     }, 1000);
 
-    // Dummy buyMiner and withdraw
-    function buyMiner() {
-      db.collection("transactions").add({
+    async function buyMiner() {
+      await db.collection("transactions").add({
         userID: user.id,
         type: "buy_miner",
         timestamp: new Date()
@@ -158,8 +147,8 @@
       alert("Miner purchase request sent!");
     }
 
-    function withdraw() {
-      db.collection("transactions").add({
+    async function withdraw() {
+      await db.collection("transactions").add({
         userID: user.id,
         type: "withdraw",
         timestamp: new Date()
@@ -167,6 +156,7 @@
       alert("Withdraw request sent!");
     }
 
+    initUser(); // بداية التطبيق
   </script>
 </body>
 </html>
