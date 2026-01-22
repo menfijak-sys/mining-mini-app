@@ -1,174 +1,185 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <meta charset="UTF-8">
-  <title>Mining Mini App</title>
+<meta charset="UTF-8">
+<title>TON Mining Mini App</title>
 
-  <!-- Telegram -->
-  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 
-  <!-- Firebase -->
-  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<style>
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  color: white;
+  background: url("1769093138394.jpg") center/cover no-repeat fixed;
+}
 
-  <style>
-    body {
-      margin: 0;
-      padding: 20px;
-      font-family: Arial, sans-serif;
-      color: white;
-      background-image: url('1769093138394.jpg');
-      background-size: cover;
-      background-position: center;
-    }
+.overlay {
+  background: rgba(0,0,0,0.7);
+  min-height: 100vh;
+  padding: 20px;
+}
 
-    .box {
-      background: rgba(0,0,0,0.65);
-      padding: 15px;
-      border-radius: 10px;
-      margin-bottom: 15px;
-    }
+.box {
+  background: rgba(0,0,0,0.6);
+  padding: 15px;
+  border-radius: 12px;
+  margin-bottom: 15px;
+}
 
-    button {
-      width: 100%;
-      padding: 12px;
-      margin-bottom: 10px;
-      border: none;
-      border-radius: 8px;
-      background: #22c55e;
-      font-size: 16px;
-      cursor: pointer;
-    }
-  </style>
+button {
+  width: 100%;
+  padding: 12px;
+  margin-top: 10px;
+  font-size: 16px;
+  border-radius: 10px;
+  border: none;
+  cursor: pointer;
+  background: #22c55e;
+  color: black;
+}
+</style>
 </head>
+
 <body>
+<div class="overlay">
 
 <h2>⛏️ Mining Dashboard</h2>
 
 <div class="box">
-  <p><b>User:</b> <span id="username">...</span></p>
+  <p><b>User:</b> <span id="username">Loading...</span></p>
   <p><b>Balance:</b> <span id="balance">0</span> TON</p>
-  <p><b>Next Claim In:</b> <span id="claimTimer">--:--</span></p>
-  <p><b>Referrals:</b> <span id="refCount">0</span></p>
+  <p><b>Next Claim In:</b> <span id="timer">Loading...</span></p>
+  <p><b>Referrals:</b> <span id="referrals">0</span></p>
 </div>
 
 <div class="box">
   <p><b>Your Referral Link:</b></p>
-  <p id="refLink">...</p>
+  <p id="refLink">Generating...</p>
 </div>
 
 <button onclick="claim()">Claim Mining Reward</button>
-<button onclick="buyMiner()">Buy Miner</button>
 <button onclick="withdraw()">Request Withdraw</button>
 
 <script>
-/* ================= TELEGRAM ================= */
+// Telegram
 const tg = window.Telegram.WebApp;
 tg.ready();
 
 const user = tg.initDataUnsafe.user;
 const startParam = tg.initDataUnsafe.start_param || null;
 
-/* ================= FIREBASE ================= */
-firebase.initializeApp({
+// SETTINGS
+const CLAIM_INTERVAL = 5 * 60 * 1000; // 5 minutes
+const CLAIM_AMOUNT = 0.1;
+const REF_REWARD = 1;
+
+// Firebase
+const firebaseConfig = {
   apiKey: "AIzaSyAlIwTDXbRaF1eSWjkIYX4MnmavkeVzDQw",
   authDomain: "miningminiapp.firebaseapp.com",
   projectId: "miningminiapp",
-});
+};
 
+firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 
-/* ================= CONSTANTS ================= */
-const CLAIM_INTERVAL = 5 * 60 * 1000; // 5 minutes
-const CLAIM_AMOUNT = 0.1;
+const userRef = db.collection("users").doc(user.id.toString());
 
-/* ================= USER ================= */
-const userId = user.id.toString();
-const referralCode = "t" + userId;
-const userRef = db.collection("users").doc(userId);
-
-/* UI */
+// UI
 document.getElementById("username").innerText =
   user.username ? "@" + user.username : user.first_name;
 
+const referralCode = "t" + user.id;
 document.getElementById("refLink").innerText =
   "https://t.me/TonMaiming_VIPbot?start=" + referralCode;
 
-/* ================= CREATE / LOAD USER ================= */
+// CREATE / LOAD USER
 userRef.get().then(doc => {
   if (!doc.exists) {
-    userRef.set({
-      userID: userId,
+
+    const newUser = {
+      userID: user.id,
       username: user.username || "",
-      balance: 100,
+      balance: 0,
+      referrals: 0,
       referralCode: referralCode,
-      referredBy: startParam,
-      lastClaim: 0
-    });
-    document.getElementById("balance").innerText = "100.0000";
-  } else {
-    document.getElementById("balance").innerText =
-      (doc.data().balance || 0).toFixed(4);
-  }
+      referredBy: null,
+      lastClaim: Date.now() - CLAIM_INTERVAL
+    };
 
-  startTimer();
-  updateReferrals();
-});
+    userRef.set(newUser).then(() => {
 
-/* ================= TIMER ================= */
-function startTimer() {
-  setInterval(() => {
-    userRef.get().then(doc => {
-      if (!doc.exists) return;
-      const last = doc.data().lastClaim || 0;
-      const now = Date.now();
-      const remain = CLAIM_INTERVAL - (now - last);
-
-      if (remain <= 0) {
-        document.getElementById("claimTimer").innerText = "Ready!";
-      } else {
-        const m = Math.floor(remain / 60000);
-        const s = Math.floor((remain % 60000) / 1000);
-        document.getElementById("claimTimer").innerText =
-          `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+      // HANDLE REFERRAL
+      if (startParam && startParam !== referralCode) {
+        db.collection("users")
+          .where("referralCode", "==", startParam)
+          .get()
+          .then(snap => {
+            if (!snap.empty) {
+              snap.forEach(refDoc => {
+                refDoc.ref.update({
+                  referrals: firebase.firestore.FieldValue.increment(1),
+                  balance: firebase.firestore.FieldValue.increment(REF_REWARD)
+                });
+                userRef.update({ referredBy: startParam });
+              });
+            }
+          });
       }
     });
-  }, 1000);
-}
 
-/* ================= REFERRALS ================= */
-function updateReferrals() {
-  db.collection("users")
-    .where("referredBy", "==", referralCode)
-    .get()
-    .then(snap => {
-      document.getElementById("refCount").innerText = snap.size;
-    });
-}
+  } else {
+    const d = doc.data();
+    document.getElementById("balance").innerText = d.balance.toFixed(2);
+    document.getElementById("referrals").innerText = d.referrals || 0;
+  }
+});
 
-/* ================= ACTIONS ================= */
+// CLAIM
 function claim() {
   userRef.get().then(doc => {
-    const data = doc.data();
+    const d = doc.data();
     const now = Date.now();
-    if (now - data.lastClaim < CLAIM_INTERVAL) {
-      alert("Not ready yet");
+    if (now - d.lastClaim < CLAIM_INTERVAL) {
+      alert("Not ready yet!");
       return;
     }
-    const newBalance = (data.balance || 0) + CLAIM_AMOUNT;
-    userRef.update({ balance: newBalance, lastClaim: now });
-    document.getElementById("balance").innerText = newBalance.toFixed(4);
+    const newBalance = d.balance + CLAIM_AMOUNT;
+    userRef.update({
+      balance: newBalance,
+      lastClaim: now
+    });
+    document.getElementById("balance").innerText = newBalance.toFixed(2);
   });
 }
 
-function buyMiner() {
-  alert("Miner request sent");
-}
+// TIMER
+setInterval(() => {
+  userRef.get().then(doc => {
+    const d = doc.data();
+    if (!d) return;
 
+    const diff = CLAIM_INTERVAL - (Date.now() - d.lastClaim);
+    if (diff <= 0) {
+      document.getElementById("timer").innerText = "Ready!";
+    } else {
+      const m = Math.floor(diff / 60000);
+      const s = Math.floor((diff % 60000) / 1000);
+      document.getElementById("timer").innerText =
+        m + ":" + s.toString().padStart(2, "0");
+    }
+  });
+}, 1000);
+
+// WITHDRAW (manual)
 function withdraw() {
-  alert("Withdraw request sent");
+  alert("Withdraw request sent (manual processing)");
 }
 </script>
 
+</div>
 </body>
 </html>
