@@ -1,186 +1,170 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
   <meta charset="UTF-8">
   <title>Mining Mini App</title>
 
+  <!-- Telegram Web App Library -->
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
+
+  <!-- Firebase SDK -->
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 
   <style>
-    body {
-      margin: 0;
-      font-family: Arial, sans-serif;
-      color: white;
-      background: url("1769093138394.jpg") no-repeat center center fixed;
-      background-size: cover;
-      padding: 20px;
-    }
-    .box {
-      background: rgba(2,6,23,0.85);
-      padding: 15px;
-      border-radius: 12px;
-      margin-bottom: 15px;
-    }
-    button {
-      background: #22c55e;
-      border: none;
-      padding: 12px;
-      width: 100%;
-      border-radius: 10px;
-      font-size: 16px;
-      cursor: pointer;
-      margin-bottom: 10px;
-      color: black;
-      font-weight: bold;
-    }
+    body { background-color: #0f172a; color: white; font-family: Arial, sans-serif; padding: 20px; text-align:center; }
+    .box { background: #020617; padding: 15px; border-radius: 10px; margin-bottom: 15px; }
+    button { background: #22c55e; border: none; padding: 10px; width: 100%; border-radius: 8px; font-size: 16px; cursor: pointer; margin-bottom: 10px; }
+    #background { position: fixed; top:0; left:0; width:100%; height:100%; z-index:-1; object-fit:cover; opacity:0.2; }
   </style>
 </head>
 <body>
 
-<h2>⛏️ Mining Dashboard</h2>
+  <img id="background" src="1769093138394.jpg">
 
-<div class="box">
-  <p><b>User:</b> <span id="username">Loading...</span></p>
-  <p><b>Balance:</b> <span id="balance">0</span> TON</p>
-  <p><b>Next Claim In:</b> <span id="timer">Loading...</span></p>
-  <p><b>Referrals:</b> <span id="refCount">0</span></p>
-</div>
+  <h2>⛏️ Mining Dashboard</h2>
 
-<div class="box">
-  <p><b>Your Referral Link:</b></p>
-  <p id="refLink">Generating...</p>
-</div>
+  <div class="box">
+    <p><b>User:</b> <span id="username">Loading...</span></p>
+    <p><b>Balance:</b> <span id="balance">0</span> TON</p>
+    <p><b>Next Claim In:</b> <span id="claimTimer">Loading...</span></p>
+    <p><b>Referrals:</b> <span id="refCount">0</span></p>
+  </div>
 
-<button onclick="claim()">Claim Mining Reward</button>
-<button onclick="withdraw()">Request Withdraw</button>
+  <div class="box">
+    <p><b>Your Referral Link:</b></p>
+    <p id="refLink">Generating...</p>
+  </div>
 
-<script>
-/* ================= Telegram ================= */
-const tg = window.Telegram.WebApp;
-tg.ready();
-const user = tg.initDataUnsafe.user;
-const startParam = tg.initDataUnsafe.start_param;
+  <button onclick="claim()">Claim Mining Reward</button>
+  <button onclick="buyMiner()">Buy Miner</button>
+  <button onclick="withdraw()">Request Withdraw</button>
 
-/* ================= Firebase ================= */
-const firebaseConfig = {
-  apiKey: "AIzaSyAlIwTDXbRaF1eSWjkIYX4MnmavkeVzDQw",
-  authDomain: "miningminiapp.firebaseapp.com",
-  projectId: "miningminiapp",
-  storageBucket: "miningminiapp.firebasestorage.app",
-  messagingSenderId: "802328536490",
-  appId: "1:802328536490:web:802892f658a4c1f1c077d3"
-};
-firebase.initializeApp(firebaseConfig);
-const db = firebase.firestore();
+  <script>
+    // Telegram WebApp
+    const tg = window.Telegram.WebApp;
+    tg.ready();
+    const user = tg.initDataUnsafe.user;
 
-/* ================= Constants ================= */
-const CLAIM_INTERVAL = 5 * 60 * 1000; // 5 minutes
-const CLAIM_REWARD = 0.1;
-const REF_REWARD = 1;
-const BOT_USERNAME = "EasyPay_telegrambot";
+    // Firebase config
+    const firebaseConfig = {
+      apiKey: "AIzaSyAlIwTDXbRaF1eSWjkIYX4MnmavkeVzDQw",
+      authDomain: "miningminiapp.firebaseapp.com",
+      projectId: "miningminiapp",
+      storageBucket: "miningminiapp.firebasestorage.app",
+      messagingSenderId: "802328536490",
+      appId: "1:802328536490:web:802892f658a4c1f1c077d3"
+    };
 
-/* ================= UI ================= */
-document.getElementById("username").innerText =
-  user?.username ? "@" + user.username : user?.first_name || "Telegram User";
+    const app = firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
 
-const referralCode = "t" + user.id;
-document.getElementById("refLink").innerText =
-  "https://t.me/" + BOT_USERNAME + "?start=" + referralCode;
+    // Display username
+    document.getElementById("username").innerText = user?.username ? "@" + user.username : user?.first_name || "Telegram User";
 
-/* ================= Firestore ================= */
-const userRef = db.collection("users").doc(user.id.toString());
+    // Referral Link
+    const referralLink = "https://t.me/EasyPay_telegrambot/app?startapp=" + user.id;
+    document.getElementById("refLink").innerText = referralLink;
 
-userRef.get().then(doc => {
-  if (!doc.exists) {
-    userRef.set({
-      userID: user.id,
-      username: user.username || "",
-      balance: 0,
-      lastClaim: 0,
-      referrals: 0,
-      claimedRef: false
-    }).then(() => handleReferral());
-  } else {
-    updateUI(doc.data());
-    handleReferral();
-  }
-});
+    // User reference in Firestore
+    const userRef = db.collection("users").doc(user.id.toString());
 
-/* ================= Referral Logic ================= */
-function handleReferral() {
-  if (!startParam || !startParam.startsWith("t")) return;
-  if (startParam === referralCode) return;
+    // Read start_param for referral
+    const params = new URLSearchParams(window.location.search);
+    const startParam = params.get('startapp');
 
-  const referrerId = startParam.substring(1);
-  const refRef = db.collection("users").doc(referrerId);
+    // Load or create user
+    userRef.get().then(doc => {
+      if (!doc.exists) {
+        userRef.set({
+          userID: user.id,
+          username: user.username || "Telegram User",
+          balance: 0,
+          referrals: 0,
+          lastClaim: 0,
+          claimedRef: false
+        }).then(() => handleReferral());
+      } else {
+        updateUI(doc.data());
+        handleReferral();
+      }
+    });
 
-  refRef.get().then(doc => {
-    if (doc.exists) {
+    function handleReferral() {
+      if (!startParam || startParam === user.id.toString()) return; // لا تعطي مكافأة لنفسه
       userRef.get().then(me => {
-        if (me.data().claimedRef) return;
-        refRef.update({
-          balance: (doc.data().balance || 0) + REF_REWARD,
-          referrals: (doc.data().referrals || 0) + 1
+        if (me.data().claimedRef) return; // مكافأة الاحالة لمنع التكرار
+        const refRef = db.collection("users").doc(startParam);
+        refRef.get().then(doc => {
+          if (doc.exists) {
+            refRef.update({
+              balance: (doc.data().balance || 0) + 1, // مكافأة الإحالة 1 TON
+              referrals: (doc.data().referrals || 0) + 1
+            });
+            userRef.update({ claimedRef: true }); // علامة أنه حصل على مكافأة
+          }
         });
-        userRef.update({ claimedRef: true });
       });
     }
-  });
-}
 
-/* ================= Claim ================= */
-function claim() {
-  userRef.get().then(doc => {
-    const data = doc.data();
-    const now = Date.now();
-    if (now - data.lastClaim < CLAIM_INTERVAL) {
-      alert("Please wait for the timer.");
-      return;
+    function updateUI(data) {
+      document.getElementById("balance").innerText = (data.balance || 0).toFixed(2);
+      document.getElementById("refCount").innerText = data.referrals || 0;
     }
-    const newBalance = (data.balance || 0) + CLAIM_REWARD;
-    userRef.update({
-      balance: newBalance,
-      lastClaim: now
-    });
-    document.getElementById("balance").innerText = newBalance.toFixed(2);
-  });
-}
 
-/* ================= Withdraw ================= */
-function withdraw() {
-  db.collection("withdraws").add({
-    userID: user.id,
-    amount: "manual",
-    time: new Date()
-  });
-  alert("Withdraw request sent!");
-}
+    // Claim reward every 5 minutes (0.1 TON)
+    const CLAIM_INTERVAL = 5 * 60 * 1000;
 
-/* ================= Timer ================= */
-setInterval(() => {
-  userRef.get().then(doc => {
-    if (!doc.exists) return;
-    const data = doc.data();
-    updateUI(data);
-  });
-}, 1000);
+    function claim() {
+      userRef.get().then(doc => {
+        const data = doc.data();
+        const now = Date.now();
+        if(now - (data.lastClaim || 0) < CLAIM_INTERVAL) {
+          alert("You can claim again in 5 minutes!");
+          return;
+        }
+        let newBalance = (data.balance || 0) + 0.1; // 0.1 TON per claim
+        userRef.update({ balance: newBalance, lastClaim: now });
+        document.getElementById("balance").innerText = newBalance.toFixed(2);
+        alert("You claimed 0.1 TON!");
+      });
+    }
 
-function updateUI(data) {
-  document.getElementById("balance").innerText = (data.balance || 0).toFixed(2);
-  document.getElementById("refCount").innerText = data.referrals || 0;
+    // Countdown Timer
+    setInterval(() => {
+      userRef.get().then(doc => {
+        const data = doc.data();
+        const now = Date.now();
+        const remaining = CLAIM_INTERVAL - (now - (data.lastClaim || 0));
+        if(remaining > 0) {
+          const minutes = Math.floor(remaining / 60000);
+          const seconds = Math.floor((remaining % 60000) / 1000);
+          document.getElementById("claimTimer").innerText = minutes + "m " + seconds + "s";
+        } else {
+          document.getElementById("claimTimer").innerText = "Ready!";
+        }
+      });
+    }, 1000);
 
-  const diff = CLAIM_INTERVAL - (Date.now() - (data.lastClaim || 0));
-  if (diff <= 0) {
-    document.getElementById("timer").innerText = "Ready!";
-  } else {
-    const m = Math.floor(diff / 60000);
-    const s = Math.floor((diff % 60000) / 1000);
-    document.getElementById("timer").innerText = `${m}m ${s}s`;
-  }
-}
-</script>
+    // Dummy buyMiner and withdraw
+    function buyMiner() {
+      db.collection("transactions").add({
+        userID: user.id,
+        type: "buy_miner",
+        timestamp: new Date()
+      });
+      alert("Miner purchase request sent!");
+    }
 
+    function withdraw() {
+      db.collection("transactions").add({
+        userID: user.id,
+        type: "withdraw",
+        timestamp: new Date()
+      });
+      alert("Withdraw request sent!");
+    }
+
+  </script>
 </body>
 </html>
